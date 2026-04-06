@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+sb3-venv/
+
+# PyTorch models & checkpoints
+*.pth
+*.zip
+checkpoints/
+best_model/
+
+# Training outputs
+results/
+runs/
+logs/
+*.log
+*.csv
+
+# Simulator data (available upon request)
+simulator/data/*.json
+
+# Rust build artifacts
+target/
+*.so
+*.dylib
+*.dll
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Plots & images
+*.png
+*.pdf
+*.svg
+!simulator/data/README.md
+
+# TensorBoard
+*_tensorboard/
+
+# Misc
+*.bak
+*.tmp

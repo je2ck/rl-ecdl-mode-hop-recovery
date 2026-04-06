@@ -1,0 +1,14 @@
+torch>=2.0
+torchvision
+numpy
+opencv-python
+scipy
+matplotlib
+pillow
+tqdm
+plotly
+requests
+pyvisa
+pyvisa-py
+toptica-lasersdk>=3.0
+maturin
