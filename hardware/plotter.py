@@ -7,13 +7,17 @@ from datetime import datetime
 class PlotManager:
     def __init__(self):
         plt.ion()
-        self.fig, (self.ax_time, self.ax_fft) = plt.subplots(2, 1, figsize=(12, 8), sharex=False)
-        self.line_signal, = self.ax_time.plot([], [], label="Signal")
-        self.line_peaks, = self.ax_time.plot([], [], 'ro', label="Detected Peaks")
-        self.line_fft, = self.ax_fft.plot([], [], label="FFT")
+        self.fig, (self.ax_time, self.ax_fft) = plt.subplots(
+            2, 1, figsize=(12, 8), sharex=False
+        )
+        (self.line_signal,) = self.ax_time.plot([], [], label="Signal")
+        (self.line_peaks,) = self.ax_time.plot([], [], "ro", label="Detected Peaks")
+        (self.line_fft,) = self.ax_fft.plot([], [], label="FFT")
 
         # Bottom text area
-        self.textbox = self.fig.text(0.5, 0.01, 'Text', ha='center', fontsize=10, wrap=True)
+        self.textbox = self.fig.text(
+            0.5, 0.01, "Text", ha="center", fontsize=10, wrap=True
+        )
 
         # Time domain plot
         self.ax_time.set_ylabel("Amplitude")
@@ -50,7 +54,12 @@ class PlotManager:
         self.ax_fft.autoscale_view()
 
         spacing = np.mean(np.diff(voltage[peaks]))
-        self.textbox.set_text(footer_text + f"\nFrequency: {frequency} THz" + f" \tSpacing: {spacing:.2f} V" + f" \tPeaks: {len(peaks)}")
+        self.textbox.set_text(
+            footer_text
+            + f"\nFrequency: {frequency} THz"
+            + f" \tSpacing: {spacing:.2f} V"
+            + f" \tPeaks: {len(peaks)}"
+        )
 
         # Update display
         self.fig.canvas.draw()

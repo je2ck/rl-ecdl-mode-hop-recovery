@@ -6,7 +6,9 @@ import time
 
 
 class RigolOscilloscope:
-    def __init__(self, resource_string="USB", is_dummy=False, channel="CHAN1", timeout=5000):
+    def __init__(
+        self, resource_string="USB", is_dummy=False, channel="CHAN1", timeout=5000
+    ):
         self.resource_string = resource_string
         self.channel = channel
         self.timeout = timeout
@@ -111,9 +113,9 @@ class RigolOscilloscope:
         max_idx = np.argmax(signal2[2:half])
         assert min_idx <= max_idx
 
-        time = time2[min_idx:max_idx + 1]
-        signal1 = signal1[min_idx:max_idx + 1]
-        signal2 = signal2[min_idx:max_idx + 1]
+        time = time2[min_idx : max_idx + 1]
+        signal1 = signal1[min_idx : max_idx + 1]
+        signal2 = signal2[min_idx : max_idx + 1]
 
         return time, signal1, signal2
 

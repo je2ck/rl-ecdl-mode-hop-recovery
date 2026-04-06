@@ -44,10 +44,16 @@ class WaveformClassifier:
         self.peaks = self.cluster_peaks(self.peaks)
         voltage_clustered = voltage[self.peaks]
         spacing = np.mean(np.diff(voltage_clustered))
-        stable = "Unstable" if not (self.is_equally_spaced(self.peaks) and abs(spacing - FSR) < 1.0) else "Stable"
+        stable = (
+            "Unstable"
+            if not (self.is_equally_spaced(self.peaks) and abs(spacing - FSR) < 1.0)
+            else "Stable"
+        )
 
         if plotter is not None:
-            plotter.update(self.time, self.data, self.peaks, frequency, voltage, footer_text=stable)
+            plotter.update(
+                self.time, self.data, self.peaks, frequency, voltage, footer_text=stable
+            )
         return stable
 
     def cluster_peaks(self, peaks, distance=5):
@@ -93,7 +99,7 @@ class WaveformClassifier:
     def plot_waveform_with_peaks(self, time, data, peaks, title="Waveform with Peaks"):
         plt.figure(figsize=(12, 5))
         plt.plot(time, data, label="Signal")
-        plt.plot(time[peaks], data[peaks], 'ro', label="Detected Peaks")
+        plt.plot(time[peaks], data[peaks], "ro", label="Detected Peaks")
         plt.xlabel("Time")
         plt.ylabel("Amplitude")
         plt.title(title)

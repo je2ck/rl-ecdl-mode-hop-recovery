@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from __future__ import division
+
 import math
 import torch
 from torch import nn
@@ -58,7 +58,9 @@ class DQN(nn.Module):
         self.action_space = action_space
 
         self.convs = nn.Sequential(
-            nn.Conv2d(args.history_length, 32, kernel_size=5, stride=2, padding=2),  # 128 -> 64
+            nn.Conv2d(
+                args.history_length, 32, kernel_size=5, stride=2, padding=2
+            ),  # 128 -> 64
             nn.ReLU(),
             nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),  # 64 -> 32
             nn.ReLU(),
@@ -138,8 +140,9 @@ class SEBlock(nn.Module):
             nn.Conv2d(channels, channels // reduction, 1),
             nn.ReLU(),
             nn.Conv2d(channels // reduction, channels, 1),
-            nn.Sigmoid()
+            nn.Sigmoid(),
         )
+
     def forward(self, x):
         return x * self.fc(x)
 
@@ -148,9 +151,10 @@ class ResidualBlock(nn.Module):
     def __init__(self, channels):
         super().__init__()
         self.conv1 = nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=False)
-        self.bn1   = nn.BatchNorm2d(channels)
+        self.bn1 = nn.BatchNorm2d(channels)
         self.conv2 = nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=False)
-        self.bn2   = nn.BatchNorm2d(channels)
+        self.bn2 = nn.BatchNorm2d(channels)
+
     def forward(self, x):
         identity = x
         out = F.relu(self.bn1(self.conv1(x)))
@@ -170,40 +174,46 @@ class ImprovedDQN(nn.Module):
         self.conv1 = nn.Sequential(
             nn.Conv2d(H, 32, kernel_size=5, stride=1, padding=2),
             nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2)  # 128 -> 64
+            nn.MaxPool2d(kernel_size=2),  # 128 -> 64
         )
         # Residual block (32 -> 32)
         self.res1 = ResidualBlock(32)
 
         # 2) Middle Conv
         self.conv2 = nn.Sequential(
-            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),  # 64 -> 32
-            nn.ReLU()
+            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1), nn.ReLU()  # 64 -> 32
         )
         self.res2 = ResidualBlock(64)
 
         # 3) Dilated Conv + SE attention
         self.conv3 = nn.Sequential(
-            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=2, dilation=2),  # 32 -> 32
+            nn.Conv2d(
+                64, 128, kernel_size=3, stride=1, padding=2, dilation=2
+            ),  # 32 -> 32
             nn.ReLU(),
-            SEBlock(128)
+            SEBlock(128),
         )
 
         # 4) Final Conv + Pool
         self.conv4 = nn.Sequential(
             nn.Conv2d(128, 128, kernel_size=3, stride=2, padding=1),  # 32 -> 16
             nn.ReLU(),
-            nn.AdaptiveAvgPool2d(1)  # 16x16 -> 1x1
+            nn.AdaptiveAvgPool2d(1),  # 16x16 -> 1x1
         )
 
         conv_out_size = 128  # 128 * 1 * 1
 
         self.sensor_fc = nn.Sequential(
-            nn.Linear(SENSOR_DIM, 64), nn.ReLU(),
-            nn.Linear(64, 128),         nn.ReLU(),
-            nn.Linear(128, 128),        nn.ReLU(),
-            nn.Linear(128, 64),         nn.ReLU(),
-            nn.Linear(64, 32),          nn.ReLU(),
+            nn.Linear(SENSOR_DIM, 64),
+            nn.ReLU(),
+            nn.Linear(64, 128),
+            nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU(),
+            nn.Linear(128, 64),
+            nn.ReLU(),
+            nn.Linear(64, 32),
+            nn.ReLU(),
             nn.LayerNorm(32),
         )
         self.image_only = args.image_only
@@ -215,7 +225,9 @@ class ImprovedDQN(nn.Module):
         self.fc_h_v = NoisyLinear(fused_size, args.hidden_size, std_init=args.noisy_std)
         self.fc_h_a = NoisyLinear(fused_size, args.hidden_size, std_init=args.noisy_std)
         self.fc_z_v = NoisyLinear(args.hidden_size, self.atoms, std_init=args.noisy_std)
-        self.fc_z_a = NoisyLinear(args.hidden_size, action_space * self.atoms, std_init=args.noisy_std)
+        self.fc_z_a = NoisyLinear(
+            args.hidden_size, action_space * self.atoms, std_init=args.noisy_std
+        )
 
     def forward(self, x, log=False):
         img = x["image"]  # [B, H, 128, 128]
@@ -225,7 +237,7 @@ class ImprovedDQN(nn.Module):
         out = self.conv2(out)
         out = self.res2(out)
         out = self.conv3(out)
-        out = self.conv4(out)    # [B, 128, 1, 1]
+        out = self.conv4(out)  # [B, 128, 1, 1]
         conv_out = out.view(out.size(0), -1)  # [B, 128]
 
         if self.image_only:

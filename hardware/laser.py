@@ -9,7 +9,11 @@ def fetch_data_safe(dlc_controller, api_client):
     current = dlc_controller.get_current()
     voltage = dlc_controller.get_voltage()
     frequency_raw = api_client.get_frequency()
-    frequency = float(frequency_raw) / 1e3 if float(frequency_raw) > 1e6 else float(frequency_raw)
+    frequency = (
+        float(frequency_raw) / 1e3
+        if float(frequency_raw) > 1e6
+        else float(frequency_raw)
+    )
     return {"current": current, "voltage": voltage, "frequency": frequency}
 
 
@@ -73,12 +77,14 @@ class DiodeLaser:
             obs_data = fetch_data_safe(self.dlc_controller, self.api_client)
 
         time_axis, data_points, voltage = self.osc.get_trim_waveform()
-        stable = self.classifier.classify(time_axis, data_points, voltage, obs_data["frequency"], self.plotter)
+        stable = self.classifier.classify(
+            time_axis, data_points, voltage, obs_data["frequency"], self.plotter
+        )
         return LaserState(
             frequency=obs_data["frequency"],
             current=obs_data["current"],
             voltage=obs_data["voltage"],
-            stable=stable == "Stable"
+            stable=stable == "Stable",
         )
 
     def latest(self) -> LaserState:

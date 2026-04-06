@@ -39,7 +39,9 @@ class LaserInterface:
         self.sensor_data = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
         self.is_simulation = api_client is None or dlc_controller is None or osc is None
         self.is_test = is_test
-        self.current_range = CURRENT_RANGE if current_range == "short" else CURRENT_LONG_RANGE
+        self.current_range = (
+            CURRENT_RANGE if current_range == "short" else CURRENT_LONG_RANGE
+        )
         if not self.is_simulation:
             self.laser = DiodeLaser(api_client, dlc_controller, osc, plotter)
         else:
@@ -81,18 +83,18 @@ class LaserInterface:
         elif action == 1:
             if self.laser_state.current + 0.1 >= self.current_upper_bound + 1e-9:
                 self.truncate = True
-            (self.laser_state, amount) = self.laser.emit(Signal.CurrentUp)
+            self.laser_state, amount = self.laser.emit(Signal.CurrentUp)
             self.drawer.update(self.laser_state, Signal.CurrentUp, amount)
         elif action == 2:
             if self.laser_state.current - 0.1 < self.current_lower_bound + 1e-9:
                 self.truncate = True
-            (self.laser_state, amount) = self.laser.emit(Signal.CurrentDown)
+            self.laser_state, amount = self.laser.emit(Signal.CurrentDown)
             self.drawer.update(self.laser_state, Signal.CurrentDown, amount)
         elif action == 3:
-            (self.laser_state, amount) = self.laser.emit(Signal.PZTUp)
+            self.laser_state, amount = self.laser.emit(Signal.PZTUp)
             self.drawer.update(self.laser_state, Signal.PZTUp, amount)
         elif action == 4:
-            (self.laser_state, amount) = self.laser.emit(Signal.PZTDown)
+            self.laser_state, amount = self.laser.emit(Signal.PZTDown)
             self.drawer.update(self.laser_state, Signal.PZTDown, amount)
 
         freq_diff, current_range, pzt_range = self._update_sensor_data(
@@ -229,8 +231,16 @@ class LaserInterface:
         else:
             target_state = self.drawer.get_target_from(self.target_frequency)
 
-        self.current_lower_bound = 120.0 if self.current_range == CURRENT_LONG_RANGE else target_state.current - self.current_range / 20.0
-        self.current_upper_bound = 139.0 if self.current_range == CURRENT_LONG_RANGE else target_state.current + self.current_range / 20.0
+        self.current_lower_bound = (
+            120.0
+            if self.current_range == CURRENT_LONG_RANGE
+            else target_state.current - self.current_range / 20.0
+        )
+        self.current_upper_bound = (
+            139.0
+            if self.current_range == CURRENT_LONG_RANGE
+            else target_state.current + self.current_range / 20.0
+        )
         self.voltage_lower_bound = target_state.voltage - 1.0
         self.voltage_upper_bound = target_state.voltage + 1.0
         self.drawer.with_target_frequency(self.target_frequency)
@@ -245,16 +255,18 @@ class LaserInterface:
                 self.current_lower_bound,
                 self.current_upper_bound,
                 self.target_frequency,
-                self.params["is_validate"]
+                self.params["is_validate"],
             )
             cnt = 0
-            while round(self.laser_state.frequency, 4) == round(self.target_frequency, 4):
+            while round(self.laser_state.frequency, 4) == round(
+                self.target_frequency, 4
+            ):
                 self.laser_state = self.laser.rand_state(
                     self.params["random_seed"],
                     self.current_lower_bound,
                     self.current_upper_bound,
                     self.target_frequency,
-                    self.params["is_validate"]
+                    self.params["is_validate"],
                 )
                 cnt += 1
                 if cnt > 100:
