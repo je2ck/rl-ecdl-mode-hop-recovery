@@ -2,28 +2,42 @@
 
 import numpy as np
 import torch
-from .interface import IMAGE_SIZE, SENSOR_DIM
+from .constants import IMAGE_SIZE, SENSOR_DIM
 
-Transition_dtype = np.dtype(
-    [
+
+def transition_dtype(image_only):
+    fields = [
         ("timestep", np.int32),
         ("image", np.uint8, (IMAGE_SIZE, IMAGE_SIZE)),
-        ("action", np.int32),
-        ("reward", np.float32),
-        ("nonterminal", np.bool_),
     ]
-)
-blank_trans = (0, np.zeros((IMAGE_SIZE, IMAGE_SIZE), dtype=np.uint8), 0, 0.0, False)
+    if not image_only:
+        fields.append(("sensor", np.float32, (SENSOR_DIM,)))
+    fields.extend(
+        [
+            ("action", np.int32),
+            ("reward", np.float32),
+            ("nonterminal", np.bool_),
+        ]
+    )
+    return np.dtype(fields)
+
+
+def blank_transition(image_only):
+    values = [0, np.zeros((IMAGE_SIZE, IMAGE_SIZE), dtype=np.uint8)]
+    if not image_only:
+        values.append(np.zeros(SENSOR_DIM, dtype=np.float32))
+    values.extend([0, 0.0, False])
+    return tuple(values)
 
 
 class SegmentTree:
-    def __init__(self, size):
+    def __init__(self, size, dtype, blank):
         self.index = 0
         self.size = size
         self.full = False
         self.tree_start = 2 ** (size - 1).bit_length() - 1
         self.sum_tree = np.zeros((self.tree_start + self.size,), dtype=np.float32)
-        self.data = np.array([blank_trans] * size, dtype=Transition_dtype)
+        self.data = np.array([blank] * size, dtype=dtype)
         self.max = 1
 
     def _update_nodes(self, indices):
@@ -101,8 +115,10 @@ class ReplayMemory:
             dtype=torch.float32,
             device=self.device,
         )
-        self.transitions = SegmentTree(capacity)
         self.image_only = args.image_only
+        self.blank_transition = blank_transition(self.image_only)
+        dtype = transition_dtype(self.image_only)
+        self.transitions = SegmentTree(capacity, dtype, self.blank_transition)
 
     def append(self, state, action, reward, terminal):
         if self.image_only:
@@ -143,7 +159,7 @@ class ReplayMemory:
             blank_mask[:, t] = np.logical_or(
                 blank_mask[:, t - 1], transitions_firsts[:, t]
             )
-        transitions[blank_mask] = blank_trans
+        transitions[blank_mask] = self.blank_transition
         return transitions
 
     def _get_samples_from_segments(self, batch_size, p_total):
@@ -265,7 +281,7 @@ class ReplayMemory:
         blank_mask = np.zeros_like(transitions_firsts, dtype=np.bool_)
         for t in reversed(range(self.history - 1)):
             blank_mask[t] = np.logical_or(blank_mask[t + 1], transitions_firsts[t + 1])
-        transitions[blank_mask] = blank_trans
+        transitions[blank_mask] = self.blank_transition
 
         if self.image_only:
             images = torch.tensor(

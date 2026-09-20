@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the associated paper."
+title: "Image-Based Reinforcement Learning for Robust Mode Hop Recovery in External-Cavity Diode Lasers"
+type: software
+authors:
+  - family-names: Bae
+    given-names: Jaeick
+  - family-names: Yu
+    given-names: Kyoungsik
+  - family-names: Song
+    given-names: Yunheung
+  - family-names: Han
+    given-names: Jeong Ho
+  - family-names: Mun
+    given-names: Jongchul
+repository-code: "https://github.com/je2ck/rl-ecdl-mode-hop-recovery"
+license: MIT

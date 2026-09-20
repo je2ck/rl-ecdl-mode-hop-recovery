@@ -62,7 +62,7 @@ class RigolOscilloscope:
             x_origin = float(preamble[5])
             y_increment = float(preamble[7])
             y_origin = float(preamble[8])
-            offset = float(self.oscilloscope.query(":CHAN1:OFFS?"))
+            offset = float(self.oscilloscope.query(f":{channel}:OFFS?"))
 
             self.oscilloscope.write(":WAV:DATA?")
             raw_data = self.oscilloscope.read_raw()[10:]  # skip SCPI header
@@ -87,6 +87,9 @@ class RigolOscilloscope:
             t1, s1 = self.get_waveform(channel="CHAN1")  # transmission/reflection
             t2, s2 = self.get_waveform(channel="CHAN3")  # frequency ramp
 
+            if t1 is None or s1 is None or t2 is None or s2 is None:
+                raise RuntimeError("Failed to acquire both oscilloscope channels")
+
             time1_list.append(t1)
             signal1_list.append(s1)
             time2_list.append(t2)
@@ -101,11 +104,6 @@ class RigolOscilloscope:
         time2 = np.max(time2_array, axis=0)
         signal1 = np.max(signal1_array, axis=0)
         signal2 = np.max(signal2_array, axis=0)
-
-        min_idx = np.argmin(signal2)
-        max_idx = np.argmax(signal2)
-        if time1 is None or time2 is None:
-            return None, None
 
         half = len(signal2) // 2
 

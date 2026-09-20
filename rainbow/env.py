@@ -1,20 +1,19 @@
 # -*- coding: utf-8 -*-
-import os
 from collections import deque
-from .interface import LaserInterface, IMAGE_SIZE, SENSOR_DIM
-import random
+from .constants import IMAGE_SIZE, SENSOR_DIM
+from .interface import LaserInterface
 import cv2
 import torch
 import numpy as np
 from datetime import datetime
 import time
 
-from hardware.oscilloscope import RigolOscilloscope
-from hardware.dlc_controller import DLC
-from hardware.wavemeter import WavemeterAPI
-from hardware.plotter import PlotManager
 from .model import DQN, ImprovedDQN
 from .cam import GradCAM
+from .config import HardwareConfig
+
+
+DECISION_STEP_PENALTY = 1e-4
 
 
 class Env:
@@ -29,12 +28,17 @@ class Env:
                 args.target_frequency, args.current_range, args.random_target
             )
         else:
-            base_url = os.environ.get("WAVEMETER_URL", "http://localhost")
-            DLC_IP = os.environ.get("DLC_IP", "localhost")
-            port = int(os.environ.get("WAVEMETER_PORT", "8000"))
-            api_client = WavemeterAPI(base_url, port)
-            self.dlc_controller = DLC(DLC_IP).__enter__()
-            self.oscilloscope = RigolOscilloscope()
+            from hardware.dlc_controller import DLC
+            from hardware.oscilloscope import RigolOscilloscope
+            from hardware.plotter import PlotManager
+            from hardware.wavemeter import WavemeterAPI
+
+            hardware = HardwareConfig.from_namespace(args)
+            api_client = WavemeterAPI(hardware.wavemeter_url, hardware.wavemeter_port)
+            self.dlc_controller = DLC(hardware.dlc_host).__enter__()
+            self.oscilloscope = RigolOscilloscope(
+                resource_string=hardware.oscilloscope_resource
+            )
             self.oscilloscope.connect()
             plotter = PlotManager()
             self.ale = LaserInterface(
@@ -53,8 +57,7 @@ class Env:
         self.ale.setInt("frame_skip", 0)
         self.ale.setBool("color_averaging", False)
         self.ale.setBool("is_validate", args.validation)
-        if args.model_current_only:
-            self.ale.setBool("model_current", True)
+        self.ale.setBool("model_current", args.control_mode == "current")
         actions = self.ale.getMinimalActionSet()
         self.actions = dict([i, e] for i, e in zip(range(len(actions)), actions))
         self.life_termination = False
@@ -118,7 +121,13 @@ class Env:
         target_temp = curr_temp + 0.1 if up else curr_temp - 0.1
         self.dlc_controller.set_temp(target_temp)
         act_temp = self.dlc_controller.get_act_temp()
-        while abs(act_temp - target_temp) < 0.02:
+        deadline = time.monotonic() + 60.0
+        while abs(act_temp - target_temp) > 0.02:
+            if time.monotonic() >= deadline:
+                raise TimeoutError(
+                    "Laser temperature did not reach the requested setpoint"
+                )
+            time.sleep(0.2)
             act_temp = self.dlc_controller.get_act_temp()
         print(
             f"[{datetime.now().strftime('%m%d_%H:%M:%S')}] After: Temperature now {target_temp} C"
@@ -132,10 +141,6 @@ class Env:
         else:
             self._reset_buffer()
             self.ale.reset_game()
-            for _ in range(random.randrange(1)):
-                self.ale.act(0)
-                if self.ale.game_over():
-                    self.ale.reset_game()
         observation = self._get_state()
         self.state_buffer.append(observation)
 
@@ -190,6 +195,8 @@ class Env:
             done = self.ale.game_over()
             if done:
                 break
+
+        reward -= DECISION_STEP_PENALTY
 
         img_observation = frame_buffer.max(dim=0)[0]
 

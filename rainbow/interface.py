@@ -5,13 +5,13 @@ from PIL import Image
 from datetime import datetime
 
 from laser_sim import PyDrawer, PyDiodeLaser, Signal
-from hardware.laser import DiodeLaser
-
-CURRENT_RANGE = 64.0
-CURRENT_LONG_RANGE = 256.0
-FREQUENCY_RANGE = 1024
-IMAGE_SIZE = 128
-SENSOR_DIM = 7
+from .constants import (
+    CURRENT_LONG_RANGE,
+    CURRENT_RANGE,
+    FREQUENCY_RANGE,
+    IMAGE_SIZE,
+    SENSOR_DIM,
+)
 
 
 class LaserInterface:
@@ -43,6 +43,8 @@ class LaserInterface:
             CURRENT_RANGE if current_range == "short" else CURRENT_LONG_RANGE
         )
         if not self.is_simulation:
+            from hardware.laser import DiodeLaser
+
             self.laser = DiodeLaser(api_client, dlc_controller, osc, plotter)
         else:
             self.laser = PyDiodeLaser(int(self.current_range))
@@ -108,11 +110,11 @@ class LaserInterface:
                 done = True
         else:
             if self.laser_state.stable and pzt_range:
-                if freq_diff_int <= 10:
-                    reward = math.exp(-(freq_diff_int / 100))
-                elif freq_diff_int <= 3:
+                if freq_diff_int <= 3:
                     reward = 1.0
                     done = True
+                elif freq_diff_int <= 10:
+                    reward = math.exp(-(freq_diff_int / 100))
             else:
                 self.truncate = True
 
@@ -145,11 +147,6 @@ class LaserInterface:
         )
         if self.truncate:
             reward = -1
-        if self.current_range == CURRENT_LONG_RANGE:
-            reward -= 0.0001 * self.episode_frames
-        else:
-            reward -= 0.001 * self.episode_frames
-
         death = done or self.truncate
         if death:
             self.game_over_flag = True

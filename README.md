@@ -1,117 +1,162 @@
 # Image-Based Reinforcement Learning for Robust Mode Hop Recovery in External-Cavity Diode Lasers
 
-This repository contains the code for the paper:
+Reference implementation for the paper **“Image-Based Reinforcement Learning
+for Robust Mode Hop Recovery in External-Cavity Diode Lasers”** by Jaeick Bae,
+Kyoungsik Yu, Yunheung Song, Jeong Ho Han, and Jongchul Mun.
 
-> **Image-Based Reinforcement Learning for Robust Mode Hop Recovery in External-Cavity Diode Lasers**
->
-> Jaeick Bae, Kyoungsik Yu, Yunheung Song, Jeong Ho Han, and Jongchul Mun
->
-> [Paper Link (DOI TBD)]
+The system trains a Rainbow DQN policy on an empirical current-frequency model
+of an external-cavity diode laser (ECDL). The trained image-based policy can then
+recover a target single-mode state by applying discrete laser-current actions.
+The paper reports 100% recovery across 163 forced temperature-drift events and
+999 successful recoveries in 1,000 abrupt-current trials. Those values are
+experimental results from the paper; reproducing them requires the corresponding
+empirical data, checkpoint, and hardware.
 
-A Rainbow DQN agent trained entirely in simulation achieves 100% recovery success across 163 continuous temperature-drift events and 99.9% success under abrupt current jumps (999/1000 trials), then deploys directly to a real ECDL system without retraining.
+## Architecture
 
-## Repository Structure
+```text
+empirical sweep data
+        |
+        v
+Rust simulator (PyO3) -> current-frequency image -> Rainbow DQN -> action
+        ^                                                        |
+        |________________________________________________________|
 
+hardware mode: DLC Pro + wavemeter + FP oscilloscope -> same RL interface
 ```
-├── simulator/          # Rust-based laser simulator with PyO3 Python bindings
-│   ├── src/            # Simulator source code
-│   └── data/           # Empirical frequency-current mapping data (not included)
-├── rainbow/            # Rainbow DQN agent
-│   ├── model.py        # CNN architecture (Table 3 in paper)
-│   ├── agent.py        # Rainbow DQN training agent
-│   ├── memory.py       # Prioritized experience replay
-│   ├── interface.py    # Simulator-RL bridge
-│   ├── env.py          # Environment wrapper
-│   └── train.py        # Training entry point
-└── hardware/           # Hardware control interfaces for real experiments
-    ├── dlc_controller.py   # TOPTICA DLC Pro controller
-    ├── wavemeter.py        # Wavelength meter API
-    ├── oscilloscope.py     # Rigol oscilloscope driver
-    └── cavity_classifier.py # FP cavity mode classifier
-```
+
+- `simulator/`: empirical laser transition model and image renderer in Rust.
+- `rainbow/`: environment, replay memory, CNN/Rainbow agent, training, and
+  evaluation.
+- `hardware/`: TOPTICA DLC Pro, wavemeter, Rigol oscilloscope, and FP-mode
+  classification adapters.
+- `tests/`: dependency-light regression tests for configuration and control
+  safety, plus optional PyTorch replay-memory tests.
+- `scripts/audit_public_tree.py`: checks tracked files for machine addresses,
+  local home paths, loopback-host fallbacks, and embedded secrets.
 
 ## Requirements
 
-- Python >= 3.10
-- PyTorch >= 2.0
-- Rust toolchain (for building the simulator)
-- [maturin](https://github.com/PyO3/maturin) (for building PyO3 bindings)
+- Python 3.10 or newer
+- PyTorch 2.0 or newer
+- A Rust toolchain with edition 2024 support
+- `maturin` for building the PyO3 extension
 
 ## Installation
 
-### 1. Build the Rust simulator
+Create and activate a virtual environment, then install the simulation and RL
+dependencies:
 
 ```bash
+python -m pip install -r requirements.txt
 cd simulator
-pip install maturin
 maturin develop --release
+cd ..
 ```
 
-This compiles the `laser_sim` Python module from Rust source.
-
-### 2. Install Python dependencies
+For real-hardware evaluation, install the additional drivers:
 
 ```bash
-pip install -r requirements.txt
+python -m pip install -r requirements-hardware.txt
 ```
 
-### 3. Set up data directory
+## Empirical simulator data
 
-Place the empirical laser data files in `simulator/data/`, or set the environment variable:
+The simulator requires the measured files described in
+`simulator/data/README.md`. Place them in `simulator/data/`, or provide their
+directory at runtime:
 
 ```bash
-export LASER_SIM_DATA_DIR=/path/to/your/data
+export LASER_SIM_DATA_DIR="<path-to-empirical-data>"
 ```
 
-## Usage
+The data used in the paper are available from the authors upon request. They are
+intentionally absent from this repository, so simulator construction and the
+data-dependent Rust tests cannot run until the files are supplied.
 
-### Training in simulation
+## Training in simulation
+
+Simulation is the default runtime. This command makes the mode explicit and
+uses the image-only enhanced CNN reported in the paper:
 
 ```bash
 python -m rainbow.train \
     --simulation \
     --image-only \
     --use-deep-conv \
-    --history-length 6 \
-    --frame-skip-num 6 \
     --T-max 5000000 \
     --target-frequency 751.52630
 ```
 
-### Deploying to hardware
+The CLI defaults for history length, frame skip, discount, multi-step return,
+prioritized replay, target-network update, optimizer, batch size, hidden size,
+and NoisyLinear standard deviation match Table 4 of the paper. Run
+`python -m rainbow.train --help` for all overrides.
+
+## Evaluating on hardware
+
+Hardware access is opt-in through `--hardware`. Connection values must be
+provided at runtime; the program exits before opening a device when any required
+value is missing or malformed.
 
 ```bash
-# Set hardware connection parameters
-export DLC_IP=<your-dlc-ip>
-export WAVEMETER_URL=http://<your-wavemeter-ip>
+export DLC_HOST="<controller-hostname-or-ip>"
+export WAVEMETER_URL="http://<wavemeter-hostname-or-ip>"
+export WAVEMETER_PORT="<wavemeter-port>"
+export OSCILLOSCOPE_RESOURCE="USB"  # or an explicit VISA resource
 
 python -m rainbow.train \
+    --hardware \
     --evaluate \
-    --model results/default/model.pth \
+    --model "<path-to-model.pth>" \
     --image-only \
-    --use-deep-conv
+    --use-deep-conv \
+    --control-mode current
 ```
 
-## Data Availability
+The same settings can be supplied with `--dlc-host`, `--wavemeter-url`,
+`--wavemeter-port`, and `--oscilloscope-resource`. Do not commit real laboratory
+addresses or VISA resource identifiers. Hardware mode sends current commands to
+the configured laser controller and should first be exercised with a validated
+checkpoint and the laser's operating limits independently confirmed.
 
-The experimental laser frequency-current mapping data used for simulator construction is available from the authors upon request. Contact: jcmun@kriss.re.kr
+## Validation
+
+The checks that do not require the private empirical data or a laboratory setup
+can be run with:
+
+```bash
+python scripts/audit_public_tree.py
+python -m unittest discover -s tests -v
+cd simulator
+cargo fmt --check
+cargo test --locked
+```
+
+Data-dependent Rust tests are marked ignored and can be run after installing the
+empirical files with `cargo test --locked -- --ignored`.
 
 ## Citation
 
+Publication metadata will be updated when the final DOI is available. Until
+then, cite the manuscript and this repository:
+
 ```bibtex
-@article{bae2025modehop,
-  title={Image-Based Reinforcement Learning for Robust Mode Hop Recovery in External-Cavity Diode Lasers},
-  author={Bae, Jaeick and Yu, Kyoungsik and Song, Yunheung and Han, Jeong Ho and Mun, Jongchul},
-  journal={TBD},
-  year={2025}
+@misc{bae2026modehop,
+  title  = {Image-Based Reinforcement Learning for Robust Mode Hop Recovery in External-Cavity Diode Lasers},
+  author = {Bae, Jaeick and Yu, Kyoungsik and Song, Yunheung and Han, Jeong Ho and Mun, Jongchul},
+  year   = {2026},
+  url    = {https://github.com/je2ck/rl-ecdl-mode-hop-recovery}
 }
 ```
 
-## Acknowledgments
+## Acknowledgments and license
 
-- The Rainbow DQN implementation is based on [Kaixhin/Rainbow](https://github.com/Kaixhin/Rainbow), licensed under MIT.
-- This work was supported by the National Research Foundation of Korea (NRF) under Grant No. RS-2023-NR119928 and RS-2023-00283259, and by the Institute for Information & Communications Technology Planning & Evaluation under Grant No. RS-2023-00223497.
+The Rainbow DQN implementation is based on
+[Kaixhin/Rainbow](https://github.com/Kaixhin/Rainbow), licensed under MIT. This
+work was supported by the National Research Foundation of Korea under grants
+RS-2023-NR119928, RS-2023-00283259, and RS-2025-25464182, and by the Institute
+for Information & Communications Technology Planning & Evaluation under grant
+RS-2023-00223497.
 
-## License
-
-This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+This repository is released under the [MIT License](LICENSE).

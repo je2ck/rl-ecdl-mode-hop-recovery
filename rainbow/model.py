@@ -4,7 +4,7 @@ import math
 import torch
 from torch import nn
 from torch.nn import functional as F
-from .interface import SENSOR_DIM
+from .constants import SENSOR_DIM
 
 
 # Factorised NoisyLinear layer with bias

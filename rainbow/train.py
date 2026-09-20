@@ -15,7 +15,7 @@ from tqdm import trange
 from .agent import Agent
 from .env import Env
 from .memory import ReplayMemory
-from .test import test
+from .evaluation import evaluate_agent
 from .logging_utils import create_loggers
 
 parser = argparse.ArgumentParser(description="Rainbow")
@@ -39,7 +39,7 @@ parser.add_argument(
 parser.add_argument(
     "--history-length",
     type=int,
-    default=4,
+    default=6,
     metavar="T",
     help="Number of consecutive states processed",
 )
@@ -52,12 +52,12 @@ parser.add_argument(
     help="Network architecture",
 )
 parser.add_argument(
-    "--hidden-size", type=int, default=512, metavar="SIZE", help="Network hidden size"
+    "--hidden-size", type=int, default=320, metavar="SIZE", help="Network hidden size"
 )
 parser.add_argument(
     "--noisy-std",
     type=float,
-    default=0.1,
+    default=0.112,
     metavar="σ",
     help="Initial standard deviation of noisy linear layers",
 )
@@ -102,31 +102,31 @@ parser.add_argument(
 parser.add_argument(
     "--priority-exponent",
     type=float,
-    default=0.5,
+    default=0.85,
     metavar="ω",
     help="Prioritised experience replay exponent (originally denoted α)",
 )
 parser.add_argument(
     "--priority-weight",
     type=float,
-    default=0.4,
+    default=0.8,
     metavar="β",
     help="Initial prioritised experience replay importance sampling weight",
 )
 parser.add_argument(
     "--multi-step",
     type=int,
-    default=3,
+    default=5,
     metavar="n",
     help="Number of steps for multi-step return",
 )
 parser.add_argument(
-    "--discount", type=float, default=0.99, metavar="γ", help="Discount factor"
+    "--discount", type=float, default=0.995, metavar="γ", help="Discount factor"
 )
 parser.add_argument(
     "--target-update",
     type=int,
-    default=int(8e3),
+    default=250,
     metavar="τ",
     help="Number of steps after which to update target network",
 )
@@ -138,13 +138,13 @@ parser.add_argument(
     help="Reward clipping (0 to disable)",
 )
 parser.add_argument(
-    "--learning-rate", type=float, default=0.0000625, metavar="η", help="Learning rate"
+    "--learning-rate", type=float, default=1e-4, metavar="η", help="Learning rate"
 )
 parser.add_argument(
-    "--adam-eps", type=float, default=1.5e-4, metavar="ε", help="Adam epsilon"
+    "--adam-eps", type=float, default=1.95e-5, metavar="ε", help="Adam epsilon"
 )
 parser.add_argument(
-    "--batch-size", type=int, default=32, metavar="SIZE", help="Batch size"
+    "--batch-size", type=int, default=128, metavar="SIZE", help="Batch size"
 )
 parser.add_argument(
     "--norm-clip",
@@ -203,9 +203,10 @@ parser.add_argument(
     help="Don't zip the memory file. Not recommended (zipping is a bit slower and much, much smaller)",
 )
 parser.add_argument(
-    "--model-current-only",
-    action="store_true",
-    help="Use model that controls only current",
+    "--control-mode",
+    choices=("current", "current-pzt"),
+    default="current",
+    help="Available control axes (the published policy uses current)",
 )
 parser.add_argument(
     "--target-frequency", type=float, default=751.52630, help="target frequency"
@@ -213,22 +214,69 @@ parser.add_argument(
 parser.add_argument(
     "--random-target", action="store_true", help="Use random target frequency"
 )
-parser.add_argument("--simulation", action="store_true", help="Use laser simulator")
+runtime = parser.add_mutually_exclusive_group()
+runtime.add_argument(
+    "--simulation",
+    dest="simulation",
+    action="store_true",
+    default=True,
+    help="Use the laser simulator (default)",
+)
+runtime.add_argument(
+    "--hardware",
+    dest="simulation",
+    action="store_false",
+    help="Connect to explicitly configured laboratory hardware",
+)
 parser.add_argument("--image-only", action="store_true", help="Use image data only")
 parser.add_argument(
-    "--frame-skip-num", type=int, default=4, help="Number of frames to skip"
+    "--frame-skip-num", type=int, default=6, help="Number of repeated action frames"
 )
 parser.add_argument(
-    "--current-range", type=str, default="short", help="current range long or short"
+    "--current-range",
+    choices=("short", "long"),
+    default="short",
+    help="Current-axis observation range",
 )
 parser.add_argument(
     "--render-with-gradcam", action="store_true", help="enable gradcam when rendering"
 )
 parser.add_argument("--use-deep-conv", action="store_true", help="use improved dqn")
 parser.add_argument("--validation", action="store_true", help="validation")
+parser.add_argument(
+    "--dlc-host",
+    help="DLC Pro hostname or IP address (hardware mode; falls back to DLC_HOST)",
+)
+parser.add_argument(
+    "--wavemeter-url",
+    help="Wavemeter service base URL (hardware mode; falls back to WAVEMETER_URL)",
+)
+parser.add_argument(
+    "--wavemeter-port",
+    type=int,
+    help="Wavemeter service port (hardware mode; falls back to WAVEMETER_PORT)",
+)
+parser.add_argument(
+    "--oscilloscope-resource",
+    help=(
+        "VISA resource or USB autodetection token (hardware mode; falls back to "
+        "OSCILLOSCOPE_RESOURCE)"
+    ),
+)
 
 # Setup
 args = parser.parse_args()
+
+if args.evaluate and not args.model:
+    parser.error("--evaluate requires --model")
+if not args.evaluate and not args.simulation:
+    parser.error("Training is supported in simulation only; add --simulation")
+if args.frame_skip_num < 2:
+    parser.error("--frame-skip-num must be at least 2")
+if args.evaluation_episodes < 1:
+    parser.error("--evaluation-episodes must be positive")
+if not args.evaluate and args.T_max <= args.learn_start:
+    parser.error("--T-max must be greater than --learn-start")
 
 writer = SummaryWriter(log_dir="runs/" + args.id)
 
@@ -240,10 +288,11 @@ if not os.path.exists(results_dir):
     os.makedirs(results_dir)
 metrics = {"steps": [], "rewards": [], "Qs": [], "best_avg_reward": -float("inf")}
 np.random.seed(args.seed)
-torch.manual_seed(np.random.randint(1, 10000))
+random.seed(args.seed)
+torch.manual_seed(args.seed)
 if torch.cuda.is_available() and not args.disable_cuda:
     args.device = torch.device("cuda")
-    torch.cuda.manual_seed(np.random.randint(1, 10000))
+    torch.cuda.manual_seed_all(args.seed)
     torch.backends.cudnn.enabled = args.enable_cudnn
 else:
     args.device = torch.device("cpu")
@@ -283,39 +332,32 @@ action_space = env.action_space()
 # Agent
 dqn = Agent(args, env)
 
-if args.model is not None and not args.evaluate:
-    if not args.memory:
-        raise ValueError("Cannot resume training without memory save path. Aborting...")
-    elif not os.path.exists(args.memory):
-        raise ValueError(
-            "Could not find memory file at {path}. Aborting...".format(path=args.memory)
-        )
-
-    mem = load_memory(args.memory, args.disable_bzip_memory)
-
-else:
-    mem = ReplayMemory(args, args.memory_capacity)
-
-priority_weight_increase = (1 - args.priority_weight) / (args.T_max - args.learn_start)
-
-
-# Construct validation memory
-val_mem = ReplayMemory(args, args.evaluation_size)
-T, done = 0, True
-while T < args.evaluation_size:
-    if done:
-        state = env.reset()
-
-    next_state, _, done = env.step(np.random.randint(0, action_space))
-    val_mem.append(state, -1, 0.0, done)
-    state = next_state
-    T += 1
-
 if args.evaluate:
     dqn.eval()
-    avg_reward, avg_Q = test(args, 0, dqn, val_mem, metrics, results_dir, evaluate=True)
+    avg_reward, avg_Q = evaluate_agent(args, 0, dqn, metrics, results_dir, env=env)
     print("Avg. reward: " + str(avg_reward) + " | Avg. Q: " + str(avg_Q))
+    env.close()
+    writer.close()
 else:
+    if args.model is not None:
+        if not args.memory:
+            raise ValueError(
+                "Cannot resume training without memory save path. Aborting..."
+            )
+        if not os.path.exists(args.memory):
+            raise ValueError(
+                "Could not find memory file at {path}. Aborting...".format(
+                    path=args.memory
+                )
+            )
+        mem = load_memory(args.memory, args.disable_bzip_memory)
+    else:
+        mem = ReplayMemory(args, args.memory_capacity)
+
+    priority_weight_increase = (1 - args.priority_weight) / (
+        args.T_max - args.learn_start
+    )
+
     # Training loop
     dqn.train()
     done = True
@@ -373,7 +415,9 @@ else:
 
             if T % args.evaluation_interval == 0:
                 dqn.eval()
-                avg_reward, avg_Q = test(args, T, dqn, val_mem, metrics, results_dir)
+                avg_reward, avg_Q = evaluate_agent(
+                    args, T, dqn, metrics, results_dir, save_best=True
+                )
                 log(
                     "T = "
                     + str(T)
@@ -400,22 +444,22 @@ else:
 
         state = next_state
 
-streaming_logger.close()
+    streaming_logger.close()
 
-import json
+    import json
 
-final_summary = {
-    "total_episodes": episode_count,
-    "total_training_steps": args.T_max,
-    "final_episode_rewards": (
-        episode_rewards[-100:] if len(episode_rewards) >= 100 else episode_rewards
-    ),
-    "training_completed": datetime.now().isoformat(),
-}
-with open(os.path.join(results_dir, "training_summary.json"), "w") as f:
-    json.dump(final_summary, f, indent=2)
+    final_summary = {
+        "total_episodes": episode_count,
+        "total_training_steps": args.T_max,
+        "final_episode_rewards": (
+            episode_rewards[-100:] if len(episode_rewards) >= 100 else episode_rewards
+        ),
+        "training_completed": datetime.now().isoformat(),
+    }
+    with open(os.path.join(results_dir, "training_summary.json"), "w") as f:
+        json.dump(final_summary, f, indent=2)
 
-print(f"Training completed! Total episodes: {episode_count}")
+    print(f"Training completed! Total episodes: {episode_count}")
 
-env.close()
-writer.close()
+    env.close()
+    writer.close()

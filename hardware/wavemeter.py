@@ -19,7 +19,7 @@ class WavemeterAPI:
 
     def _fetch_data(self, url: str) -> Optional[Union[Dict[str, Any], str]]:
         try:
-            response = requests.get(url)
+            response = requests.get(url, timeout=5.0)
             response.raise_for_status()
             return (
                 response.json()
@@ -71,8 +71,13 @@ class WavemeterAPI:
 
 
 if __name__ == "__main__":
-    base_url = os.environ.get("WAVEMETER_URL", "http://localhost")
-    port = int(os.environ.get("WAVEMETER_PORT", "8000"))
+    base_url = os.environ.get("WAVEMETER_URL")
+    port_text = os.environ.get("WAVEMETER_PORT")
+    if not base_url or not port_text:
+        raise SystemExit(
+            "Set WAVEMETER_URL and WAVEMETER_PORT before running this hardware check."
+        )
+    port = int(port_text)
 
     api_client = WavemeterAPI(base_url, port, is_dummy=False)
 

@@ -41,5 +41,7 @@ class GradCAM:
         cam = (weights * act).sum(dim=1)[0]  # [H, W]
         cam = F.relu(cam)
         cam -= cam.min()
-        cam /= cam.max()
+        maximum = cam.max()
+        if maximum > 0:
+            cam /= maximum
         return cam.cpu().numpy(), idx

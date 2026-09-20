@@ -9,10 +9,9 @@ use serde_with::{DisplayFromStr, serde_as};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, Read, Write};
-use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use crate::laser::{data_dir, LaserState, Signal, read_from_file, round_to_decimal_places};
+use crate::laser::{LaserState, Signal, data_dir, read_from_file, round_to_decimal_places};
 
 const DEFAULT_TARGET_FREQUENCY: f64 = 751.52630;
 pub const FREQUENCY_RANGE: u32 = 1024;
@@ -227,7 +226,6 @@ impl Drawer {
 
         let white = Rgb([255, 255, 255]);
         let green = Rgb([0, 255, 0]);
-        let blue = Rgb([0, 0, 255]);
         let red = Rgb([255, 0, 0]);
 
         let mut instructions: Vec<(u32, u32, Rgb<u8>)> = Vec::new();
@@ -406,11 +404,6 @@ fn apply_instructions_parallel(
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        fs::File,
-        io::{BufRead, BufReader},
-    };
-
     use super::*;
 
     #[test]
@@ -421,6 +414,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires empirical simulator data"]
     fn test_push_frequency() {
         let mut drawer = Drawer::new(64).unwrap();
         let laser_state = LaserState {
@@ -463,6 +457,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires empirical simulator data"]
     fn test_generating_image() {
         let mut drawer = generate_test_drawer();
         let signal = Signal::CurrentUp;

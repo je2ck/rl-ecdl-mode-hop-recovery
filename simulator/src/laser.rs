@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use pyo3::prelude::*;
 
 use eyre;
-use rand::distributions::{Bernoulli, Uniform};
+use rand::distributions::Uniform;
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng, thread_rng};
 use rand_distr::{Distribution, Normal};
@@ -154,7 +154,7 @@ impl DiodeLaser {
             Signal::PZTUp => pzt_up_sample(),
             _ => 0.0,
         };
-        let n = 2usize;
+        let n = 15usize;
         match signal {
             Signal::CurrentUp => {
                 for _ in 0..n {
@@ -478,8 +478,8 @@ impl DiodeLaser {
 }
 
 fn pzt_up_sample() -> f64 {
-    let normal =
-        Normal::new(MEAN_PZT_UP_CHANGE, STD_PZT_UP_CHANGE).expect("Invalid distribution parameters");
+    let normal = Normal::new(MEAN_PZT_UP_CHANGE, STD_PZT_UP_CHANGE)
+        .expect("Invalid distribution parameters");
     let mut rng = thread_rng();
     normal.sample(&mut rng)
 }
@@ -510,12 +510,6 @@ fn add_random_4decimal(frequency: f64) -> f64 {
     (frequency * 10_000.0).round() / 10_000.0 + random_part
 }
 
-fn random_stability() -> bool {
-    let mut rng = thread_rng();
-    let bernoulli = Bernoulli::new(0.9).unwrap();
-    rng.sample(bernoulli)
-}
-
 pub fn read_from_file<P: AsRef<Path>>(file_path: P) -> eyre::Result<Vec<LaserState>> {
     let file = File::open(file_path.as_ref())?;
     let reader = BufReader::new(file);
@@ -540,11 +534,13 @@ mod tests {
     use super::*;
 
     #[test]
+    #[ignore = "requires empirical simulator data"]
     fn test_new() {
         DiodeLaser::new(64).unwrap();
     }
 
     #[test]
+    #[ignore = "requires empirical simulator data"]
     fn test_emit_current_up() -> eyre::Result<()> {
         let state = LaserState {
             current: 134.4,

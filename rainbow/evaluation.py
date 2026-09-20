@@ -7,77 +7,77 @@ from plotly.graph_objs.scatter import Line
 import torch
 from datetime import datetime
 
-from .env import Env
 from .logging_utils import EvaluationLogger, StreamingLogger
+from .env import Env
 
 
-def test(args, T, dqn, val_mem, metrics, results_dir, evaluate=False):
-    env = Env(args)
+def evaluate_agent(args, step, dqn, metrics, results_dir, save_best=False, env=None):
+    """Evaluate a policy without taking unrelated exploratory actions first."""
+
+    owns_environment = env is None
+    if env is None:
+        env = Env(args)
     env.eval()
-    metrics["steps"].append(T)
-    T_rewards, T_Qs = [], []
+    metrics["steps"].append(step)
+    episode_returns, q_values = [], []
 
     evaluation_data = []
 
     evaluation_logger = EvaluationLogger(results_dir)
     streaming_logger = StreamingLogger(results_dir)
 
-    done = True
-    for episode_idx in range(args.evaluation_episodes):
-        episode_rewards = []
-        episode_steps = 0
-        while True:
-            if done:
-                state, reward_sum, done = env.reset(), 0, False
+    try:
+        for episode_idx in range(args.evaluation_episodes):
+            state = env.reset()
+            reward_sum = 0.0
+            episode_rewards = []
+            episode_steps = 0
 
-            action = dqn.act_e_greedy(state)
-            state, reward, done = env.step(action)
-            reward_sum += reward
-            episode_rewards.append(reward)
-            episode_steps += 1
+            while True:
+                q_values.append(dqn.evaluate_q(state))
+                action = dqn.act(state)
+                state, reward, done = env.step(action)
+                reward_sum += reward
+                episode_rewards.append(reward)
+                episode_steps += 1
 
-            if args.render:
-                env.render()
+                if args.render:
+                    env.render()
 
-            if done:
-                T_rewards.append(reward_sum)
+                if done:
+                    episode_returns.append(reward_sum)
+                    episode_info = {
+                        "evaluation_step": step,
+                        "episode_idx": episode_idx,
+                        "total_reward": reward_sum,
+                        "episode_steps": episode_steps,
+                        "step_rewards": episode_rewards,
+                        "timestamp": datetime.now().isoformat(),
+                    }
+                    evaluation_data.append(episode_info)
+                    streaming_logger.log_evaluation_episode(episode_info)
+                    break
+    finally:
+        streaming_logger.close()
+        if owns_environment:
+            env.close()
 
-                episode_info = {
-                    "evaluation_step": T,
-                    "episode_idx": episode_idx,
-                    "total_reward": reward_sum,
-                    "episode_steps": episode_steps,
-                    "step_rewards": episode_rewards,
-                    "timestamp": datetime.now().isoformat(),
-                }
-                evaluation_data.append(episode_info)
-
-                streaming_logger.log_evaluation_episode(episode_info)
-
-                break
-
-    evaluation_logger.log_evaluation(T, evaluation_data)
-    streaming_logger.close()
-
-    env.close()
-
-    for state in val_mem:
-        T_Qs.append(dqn.evaluate_q(state))
-
-    avg_reward, avg_Q = sum(T_rewards) / len(T_rewards), sum(T_Qs) / len(T_Qs)
-    if not evaluate:
+    evaluation_logger.log_evaluation(step, evaluation_data)
+    avg_reward = sum(episode_returns) / len(episode_returns)
+    avg_q = sum(q_values) / len(q_values)
+    if save_best:
         if avg_reward > metrics["best_avg_reward"]:
             metrics["best_avg_reward"] = avg_reward
             dqn.save(results_dir)
 
-        metrics["rewards"].append(T_rewards)
-        metrics["Qs"].append(T_Qs)
+        metrics["rewards"].append(episode_returns)
+        metrics["Qs"].append(q_values)
         torch.save(metrics, os.path.join(results_dir, "metrics.pth"))
 
         _plot_line(metrics["steps"], metrics["rewards"], "Reward", path=results_dir)
         _plot_line(metrics["steps"], metrics["Qs"], "Q", path=results_dir)
 
-    return avg_reward, avg_Q
+    return avg_reward, avg_q
 
 
 def _plot_line(xs, ys_population, title, path=""):

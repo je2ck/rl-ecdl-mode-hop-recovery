@@ -11,6 +11,8 @@ build/
 venv/
 .venv/
 sb3-venv/
+.env
+.env.*
 
 # PyTorch models & checkpoints
 *.pth
@@ -56,3 +58,5 @@ Thumbs.db
 # Misc
 *.bak
 *.tmp
+*.key
+*.pem
