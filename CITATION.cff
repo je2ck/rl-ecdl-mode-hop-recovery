@@ -2,6 +2,9 @@ cff-version: 1.2.0
 message: "If you use this software, please cite the associated paper."
 title: "Image-Based Reinforcement Learning for Robust Mode Hop Recovery in External-Cavity Diode Lasers"
 type: software
+version: "1.0.0"
+date-released: "2026-09-20"
+doi: "10.5281/zenodo.22857784"
 authors:
   - family-names: Bae
     given-names: Jaeick

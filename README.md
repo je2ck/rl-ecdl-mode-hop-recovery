@@ -1,5 +1,7 @@
 # Image-Based Reinforcement Learning for Robust Mode Hop Recovery in External-Cavity Diode Lasers
 
+[![DOI](https://zenodo.org/badge/1202613242.svg)](https://doi.org/10.5281/zenodo.22857783)
+
 Reference implementation for the paper **“Image-Based Reinforcement Learning
 for Robust Mode Hop Recovery in External-Cavity Diode Lasers”** by Jaeick Bae,
 Kyoungsik Yu, Yunheung Song, Jeong Ho Han, and Jongchul Mun.
@@ -138,17 +140,22 @@ empirical files with `cargo test --locked -- --ignored`.
 
 ## Citation
 
-Publication metadata will be updated when the final DOI is available. Until
-then, cite the manuscript and this repository:
+To cite the archived `v1.0.0` software release, use:
 
 ```bibtex
-@misc{bae2026modehop,
-  title  = {Image-Based Reinforcement Learning for Robust Mode Hop Recovery in External-Cavity Diode Lasers},
-  author = {Bae, Jaeick and Yu, Kyoungsik and Song, Yunheung and Han, Jeong Ho and Mun, Jongchul},
-  year   = {2026},
-  url    = {https://github.com/je2ck/rl-ecdl-mode-hop-recovery}
+@software{bae2026modehop,
+  author    = {Bae, Jaeick and Yu, Kyoungsik and Song, Yunheung and Han, Jeong Ho and Mun, Jongchul},
+  title     = {Image-Based Reinforcement Learning for Robust Mode Hop Recovery in External-Cavity Diode Lasers},
+  version   = {1.0.0},
+  year      = {2026},
+  publisher = {Zenodo},
+  doi       = {10.5281/zenodo.22857784},
+  url       = {https://doi.org/10.5281/zenodo.22857784}
 }
 ```
+
+The DOI badge links to the all-versions record, which resolves to the latest
+archived release.
 
 ## Acknowledgments and license
 
